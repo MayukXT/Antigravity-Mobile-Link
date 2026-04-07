@@ -27,6 +27,17 @@ else
 fi
 
 echo "[STARTING] Launching via Unified Launcher..."
+
+# Create and use Virtual Environment to avoid PEP 668 issues
+if [ ! -d "venv" ]; then
+    echo "[INFO] Creating Python virtual environment..."
+    $PYTHON_CMD -m venv venv
+fi
+
+if [ -f "venv/bin/activate" ]; then
+    source venv/bin/activate
+fi
+
 $PYTHON_CMD launcher.py --mode local
 
 # Keep terminal open if server crashes

@@ -22,6 +22,15 @@ echo ===================================================
 echo.
 
 echo [STARTING] Launching via Unified Launcher...
+
+if not exist "venv\" (
+    echo [INFO] Creating Python virtual environment...
+    python -m venv venv
+)
+if exist "venv\Scripts\activate.bat" (
+    call venv\Scripts\activate.bat
+)
+
 python launcher.py --mode local
 
 :: Keep window open if server crashes

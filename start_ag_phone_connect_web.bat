@@ -65,6 +65,15 @@ echo [INFO] .env configuration found.
 :: 5. Launch everything via Python
 echo [1/1] Launching Antigravity Phone Connect...
 echo (This will start both the server and the web tunnel)
+
+if not exist "venv\" (
+    echo [INFO] Creating Python virtual environment...
+    python -m venv venv
+)
+if exist "venv\Scripts\activate.bat" (
+    call venv\Scripts\activate.bat
+)
+
 python launcher.py --mode web
 if %errorlevel% neq 0 (
     echo.

@@ -56,6 +56,17 @@ echo "[INFO] .env configuration found."
 # 5. Launch everything via Python
 echo "[1/1] Launching Antigravity Phone Connect..."
 echo "(This will start both the server and the web tunnel)"
+
+# Create and use Virtual Environment to avoid PEP 668 issues
+if [ ! -d "venv" ]; then
+    echo "[INFO] Creating Python virtual environment..."
+    python3 -m venv venv
+fi
+
+if [ -f "venv/bin/activate" ]; then
+    source venv/bin/activate
+fi
+
 python3 launcher.py --mode web
 
 # 6. Auto-close when done
