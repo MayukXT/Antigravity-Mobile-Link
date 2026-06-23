@@ -3,13 +3,11 @@
 
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>Antigravity Phone Connect</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link
-        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap"
-        rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="css/style.css">
     <!-- Security: Content Security Policy -->
     <meta http-equiv="Content-Security-Policy"
@@ -20,69 +18,37 @@
     <!-- Header -->
     <header class="header">
         <h1>
-            <span>Antigravity Phone Connect</span>
+            <span>Antigravity</span>
         </h1>
 
         <div class="header-controls">
             <button class="new-chat-btn" id="newChatBtn" aria-label="New Chat" title="New Chat (Ctrl+Shift+L)">
-                <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
                     <line x1="12" y1="5" x2="12" y2="19"></line>
                     <line x1="5" y1="12" x2="19" y2="12"></line>
                 </svg>
             </button>
             <button class="history-btn" id="historyBtn" aria-label="Chat History" title="Past Conversations">
-                <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round">
-                    <circle cx="12" cy="12" r="10"></circle>
-                    <polyline points="12 6 12 12 16 14"></polyline>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M12 8v4l3 3"></path>
+                    <circle cx="12" cy="12" r="9"></circle>
+                    <path d="M3.05 11a9 9 0 1 1 .5 4m-.5 5v-5h5"></path>
                 </svg>
             </button>
-            <button class="stop-btn" id="stopBtn" aria-label="STOP">
-                <span>STOP</span>
-            </button>
-            <button class="refresh-btn" id="refreshBtn" aria-label="Refresh">
-                <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round">
+            <button class="refresh-btn" id="refreshBtn" aria-label="Refresh" title="Force Refresh">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M23 4v6h-6"></path>
-                    <path d="M1 20v-6h6"></path>
-                    <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+                    <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
                 </svg>
             </button>
-            <div class="status-badge">
-                <div class="status-dot disconnected" id="statusDot"></div>
-                <span id="statusText">Connecting...</span>
-            </div>
+            <button class="settings-btn" id="settingsBtn" aria-label="Settings" title="Settings Panel">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="3"></circle>
+                    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+                </svg>
+            </button>
         </div>
     </header>
-
-    <!-- Settings Bar -->
-    <div class="settings-bar">
-        <div class="setting-chip" id="modeBtn">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
-            </svg>
-            <span id="modeText">Fast</span>
-        </div>
-        <div class="setting-chip" id="modelBtn">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <circle cx="12" cy="12" r="10" />
-                <path d="M12 16v-4" />
-                <path d="M12 8h.01" />
-            </svg>
-            <span id="modelText">Select Model</span>
-        </div>
-        <div class="setting-chip" id="syncStats" style="cursor: default; border: none; background: transparent;">
-            <span id="statsText" style="font-size: 10px; opacity: 0.6;">Syncing...</span>
-        </div>
-        <div class="setting-chip" id="supportBtn"
-            style="cursor: pointer; border: none; background: transparent; padding-left: 0; padding-right: 0;"
-            aria-label="Support">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2"
-                style="fill: #ef4444; filter: drop-shadow(0 0 8px var(--accent)); transition: all 0.3s; margin-left: 4px;">
-                <path
-                    d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z">
-                </path>
-            </svg>
-        </div>
-    </div>
 
     <!-- SSL Banner (shown when running HTTP) -->
     <div class="ssl-banner" id="sslBanner" style="display: none;">
@@ -103,8 +69,9 @@
 
     <!-- Scroll to Bottom FAB -->
     <button class="fab" id="scrollToBottom" aria-label="Scroll to bottom">
-        <svg viewBox="0 0 24 24" fill="none">
-            <path d="M12 5v14M19 12l-7 7-7-7" stroke-linecap="round" stroke-linejoin="round" />
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="12" y1="5" x2="12" y2="19"></line>
+            <polyline points="19 12 12 19 5 12"></polyline>
         </svg>
     </button>
 
@@ -118,17 +85,30 @@
 
     <!-- Input Section -->
     <div class="input-section">
+        <div class="autocomplete-popup" id="autocompletePopup"></div>
         <div class="input-wrapper">
-            <textarea id="messageInput" placeholder="Message..." rows="1"></textarea>
-
-
-
+            <textarea id="messageInput" placeholder="Message Antigravity..." rows="1"></textarea>
             <button class="send-btn" id="sendBtn" aria-label="Send">
-                <svg viewBox="0 0 24 24">
-                    <path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"
-                        style="fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round;" />
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="12" y1="19" x2="12" y2="5"></line>
+                    <polyline points="5 12 12 5 19 12"></polyline>
                 </svg>
             </button>
+        </div>
+    </div>
+
+    <!-- Goal Progress Card Overlay -->
+    <div class="goal-progress-overlay" id="goalProgressOverlay">
+        <div class="goal-progress-card">
+            <div class="goal-progress-header">
+                <span class="goal-label">ACTIVE GOAL</span>
+                <button class="goal-close-btn" id="closeGoalBtn">×</button>
+            </div>
+            <div class="goal-title" id="goalTitleText">Running autonomous task...</div>
+            <div class="goal-progress-bar-container">
+                <div class="goal-progress-bar" id="goalProgressBar" style="width: 0%;"></div>
+            </div>
+            <div class="goal-steps" id="goalStepsText">Initializing goal mode...</div>
         </div>
     </div>
 
@@ -137,26 +117,28 @@
         <div class="modal-panel" id="modalPanel">
             <div class="modal-title" id="modalTitle">Select Option</div>
             <div id="modalList"></div>
-            <div style="margin-top:20px; text-align:center;">
-                <button id="closeModalBtn"
-                    style="background:transparent; border:none; color:var(--text-muted); padding:10px;">Cancel</button>
+            <div class="modal-cancel-wrapper">
+                <button id="closeModalBtn">Cancel</button>
             </div>
+        </div>
+    </div>
+
+    <!-- Quick Pick Prompt Modal Overlay -->
+    <div class="modal-overlay" id="quickInputOverlay">
+        <div class="modal-panel" id="quickInputPanel">
+            <div class="modal-title" id="quickInputTitle">Select Option</div>
+            <div id="quickInputList"></div>
         </div>
     </div>
 
     <!-- Support Modal -->
     <div class="modal-overlay" id="supportOverlay">
-        <div class="modal-panel" style="text-align: center; padding: 30px 20px;">
-            <div class="modal-title" style="margin-bottom: 10px; font-size: 18px;">Support the Developer 💖</div>
-            <p style="color: var(--text-muted); margin-bottom: 24px; font-size: 14px; line-height: 1.5;">If you find
-                <b>Antigravity Phone Connect</b> useful, <br>please consider supporting the Project and the Developer!
-            </p>
-            <a href="https://krishnakanthb13.github.io/S/PLPm.html" target="_blank"
-                style="display: inline-block; background: var(--accent-gradient); color: white; padding: 12px 28px; border-radius: 12px; font-size: 15px; font-weight: 600; text-decoration: none; box-shadow: 0 4px 12px var(--accent-glow); margin-bottom: 20px;">Support</a>
-            <div>
-                <button id="closeSupportBtn"
-                    style="background:transparent; border:none; color:var(--text-muted); padding:10px; cursor: pointer; font-size: 14px;">Maybe
-                    Later</button>
+        <div class="modal-panel support-panel">
+            <div class="modal-title">Support the Developer 💖</div>
+            <p class="support-desc">If you find <b>Antigravity Phone Connect</b> useful, please consider supporting the project and the developer!</p>
+            <a class="support-link-btn" href="https://krishnakanthb13.github.io/S/PLPm.html" target="_blank">Support Project</a>
+            <div class="modal-cancel-wrapper">
+                <button id="closeSupportBtn">Maybe Later</button>
             </div>
         </div>
     </div>
@@ -165,9 +147,9 @@
     <div class="history-layer" id="historyLayer">
         <div class="history-header">
             <button class="icon-btn" aria-label="Back">
-                <svg viewBox="0 0 24 24" width="24" height="24">
-                    <path d="M19 12H5M12 19l-7-7 7-7" stroke="currentColor" stroke-width="2" stroke-linecap="round"
-                        stroke-linejoin="round" />
+                <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="19" y1="12" x2="5" y2="12"></line>
+                    <polyline points="12 19 5 12 12 5"></polyline>
                 </svg>
             </button>
             <h2>Conversations</h2>
@@ -175,6 +157,94 @@
         </div>
         <div class="history-content" id="historyList">
             <!-- Items injected here -->
+        </div>
+    </div>
+
+    <!-- Settings Layer (Full Screen) -->
+    <div class="settings-layer" id="settingsLayer">
+        <div class="settings-header">
+            <button class="icon-btn" id="backSettingsBtn" aria-label="Back">
+                <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="19" y1="12" x2="5" y2="12"></line>
+                    <polyline points="12 19 5 12 12 5"></polyline>
+                </svg>
+            </button>
+            <h2>Application Settings</h2>
+            <div style="width: 24px;"></div> <!-- Spacer -->
+        </div>
+        <div class="settings-content">
+            <!-- Active Mode -->
+            <div class="settings-section">
+                <h3>IDE Mode</h3>
+                <div class="settings-row">
+                    <span>Planning Mode</span>
+                    <label class="switch-container">
+                        <input type="checkbox" id="modeToggle">
+                        <span class="switch-slider"></span>
+                    </label>
+                </div>
+                <p class="section-desc">Toggle between Fast Mode (quick execution) and Planning Mode (multi-step tasks).</p>
+            </div>
+
+            <!-- Active Model -->
+            <div class="settings-section">
+                <h3>Selected AI Model</h3>
+                <div class="model-select-wrapper">
+                    <select id="settingsModelSelect" class="premium-select">
+                        <option value="Gemini 1.5 Pro">Gemini 1.5 Pro (High)</option>
+                        <option value="Gemini 1.5 Flash">Gemini 1.5 Flash (Speed)</option>
+                        <option value="Claude 3.5 Sonnet">Claude 3.5 Sonnet</option>
+                        <option value="Claude 3.5 Opus">Claude 3.5 Opus</option>
+                        <option value="GPT-4o">GPT-4o</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- Skills Toggles -->
+            <div class="settings-section">
+                <h3>Agent Skills</h3>
+                <div class="skills-list" id="settingsSkillsList">
+                    <!-- Loaded dynamically -->
+                </div>
+            </div>
+
+            <!-- MCP Servers -->
+            <div class="settings-section">
+                <h3>MCP Servers</h3>
+                <div class="mcp-list" id="settingsMcpList">
+                    <!-- Loaded dynamically -->
+                </div>
+            </div>
+
+            <!-- Git Workspace Status -->
+            <div class="settings-section">
+                <h3>Workspace Git Control</h3>
+                <div class="git-status-row">
+                    <span id="gitStatusText">Checking workspace status...</span>
+                    <button class="revert-btn-trigger" id="revertBtn">Revert Changes</button>
+                </div>
+            </div>
+
+            <!-- Support & Info -->
+            <div class="settings-footer">
+                <button class="support-btn-premium" id="settingsSupportBtn">Support Developer 💖</button>
+                <div class="version-info">Version 1.0.0 (Production Grade)</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Revert Modified Files Modal Overlay -->
+    <div class="modal-overlay" id="revertOverlay">
+        <div class="modal-panel revert-panel">
+            <div class="modal-title">Revert Local Changes</div>
+            <p class="revert-desc">Select which files you want to revert to their last committed state. This action is irreversible.</p>
+            <div class="revert-files-list" id="revertFilesList">
+                <!-- Checkboxes for files -->
+            </div>
+            <div class="revert-actions">
+                <button class="action-revert-confirm" id="confirmRevertBtn">Revert Selected</button>
+                <button class="action-revert-cancel" id="cancelRevertBtn">Cancel</button>
+            </div>
         </div>
     </div>
 

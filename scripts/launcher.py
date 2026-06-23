@@ -8,6 +8,12 @@ import socket
 import argparse
 import logging
 
+# Force UTF-8 encoding on stdout/stderr to prevent UnicodeEncodeError on Windows command consoles
+if hasattr(sys.stdout, 'reconfigure'):
+    sys.stdout.reconfigure(encoding='utf-8')
+if hasattr(sys.stderr, 'reconfigure'):
+    sys.stderr.reconfigure(encoding='utf-8')
+
 # -----------------------------------------------------------------------------
 # Dependency Management
 # -----------------------------------------------------------------------------
@@ -95,6 +101,13 @@ def print_qr(url):
 # Main Execution
 # -----------------------------------------------------------------------------
 def main():
+    # Self-healing: Check if we are running in the virtual environment.
+    # If not, and a venv exists, re-execute using the venv Python.
+    venv_python = os.path.join("venv", "Scripts", "python.exe") if sys.platform == "win32" else os.path.join("venv", "bin", "python")
+    if os.path.exists(venv_python) and "venv" not in sys.executable:
+        print(f"🔄 Hot-swapping to virtual environment Python: {venv_python}")
+        os.execv(venv_python, [venv_python] + sys.argv)
+
     parser = argparse.ArgumentParser(description="Antigravity Phone Connect Launcher")
     parser.add_argument('--mode', choices=['local', 'web'], default='web', help="Mode to run in: 'local' (WiFi) or 'web' (Internet)")
     parser.add_argument('--provider', choices=['ngrok', 'cloudflare', 'pinggy'], help="Tunnel provider (defaults to .env TUNNEL_PROVIDER or 'ngrok')")
@@ -131,7 +144,7 @@ def main():
     with open("server_log.txt", "w") as f:
         f.write(f"--- Server Started at {time.ctime()} ---\n")
 
-    node_cmd = ["node", "server.js"]
+    node_cmd = ["node", "src/server.js"]
     node_process = None
     
     try:

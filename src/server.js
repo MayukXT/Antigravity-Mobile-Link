@@ -10,7 +10,7 @@ import fs from 'fs';
 import os from 'os';
 import WebSocket from 'ws';
 import { fileURLToPath } from 'url';
-import { dirname, join } from 'path';
+import path, { dirname, join, relative } from 'path';
 import { inspectUI } from './ui_inspector.js';
 import { execSync } from 'child_process';
 
@@ -186,16 +186,16 @@ async function connectCDP(url) {
         } catch (e) { }
     });
 
-    const call = (method, params) => new Promise((resolve, reject) => {
+    const call = (method, params, timeoutMs = CDP_CALL_TIMEOUT) => new Promise((resolve, reject) => {
         const id = idCounter++;
 
         // Setup timeout to prevent memory leaks from never-resolved calls
         const timeoutId = setTimeout(() => {
             if (pendingCalls.has(id)) {
                 pendingCalls.delete(id);
-                reject(new Error(`CDP call ${method} timed out after ${CDP_CALL_TIMEOUT}ms`));
+                reject(new Error(`CDP call ${method} timed out after ${timeoutMs}ms`));
             }
-        }, CDP_CALL_TIMEOUT);
+        }, timeoutMs);
 
         pendingCalls.set(id, { resolve, reject, timeoutId });
         ws.send(JSON.stringify({ id, method, params }));
@@ -210,7 +210,14 @@ async function connectCDP(url) {
 // Capture chat snapshot
 async function captureSnapshot(cdp) {
     const CAPTURE_SCRIPT = `(async () => {
-        const cascade = document.getElementById('conversation') || document.getElementById('chat') || document.getElementById('cascade');
+        let cascade = document.getElementById('conversation') || document.getElementById('chat') || document.getElementById('cascade');
+        if (!cascade) {
+            cascade = document.querySelector('.interactive-session') || document.querySelector('.chat-body') || document.querySelector('.chat-container') || document.querySelector('.vscode-chat-view');
+        }
+        if (!cascade && (document.querySelector('.monaco-workbench') || document.querySelector('.vscode-dark') || document.body.className.includes('vscode') || document.body.className.includes('mac'))) {
+            cascade = document.body;
+        }
+        
         if (!cascade) {
             // Debug info
             const body = document.body;
@@ -251,23 +258,27 @@ async function captureSnapshot(cdp) {
         try {
             // 1. Identify common interaction wrappers by class combinations
             const interactionSelectors = [
-                '.relative.flex.flex-col.gap-8',
-                '.flex.grow.flex-col.justify-start.gap-8',
                 'div[class*="interaction-area"]',
-                '.p-1.bg-gray-500\\/10',
+                '.p-1.bg-gray-500\\\\/10',
                 '.outline-solid.justify-between',
                 '[contenteditable="true"]',
                 '[data-lexical-editor]',
+                '[id="antigravity.agentSidePanelInputBox"]',
+                '[aria-label="Message input"]',
                 'form',
                 // New aggressive selectors for recent Antigravity versions
-                '.mx-8.mb-8',
-                '.mx-4.mb-4',
                 '.fixed.bottom-0',
                 '.absolute.bottom-0'
             ];
 
             interactionSelectors.forEach(selector => {
-                clone.querySelectorAll(selector).forEach(el => {
+                let matched = [];
+                try {
+                    matched = Array.from(clone.querySelectorAll(selector));
+                } catch(e) {
+                    matched = [];
+                }
+                matched.forEach(el => {
                     try {
                         // Protect elements that contain interactive buttons the user might need
                         const text = (el.innerText || '').toLowerCase();
@@ -293,7 +304,8 @@ async function captureSnapshot(cdp) {
                              for (let i = 0; i < 4; i++) {
                                  if (!parent || parent === clone) break;
                                  const pCls = (parent.className || '').toString();
-                                 if (pCls.includes('mx-') || pCls.includes('mb-') || pCls.includes('bg-')) {
+                                 if (pCls.includes('message') || pCls.includes('bubble') || pCls.includes('conversation')) break;
+                                 if (pCls.includes('mx-') || pCls.includes('mb-') || pCls.includes('bg-') || pCls.includes('rounded')) {
                                      targetToRemove = parent;
                                  }
                                  parent = parent.parentElement;
@@ -423,6 +435,16 @@ async function captureSnapshot(cdp) {
                 } catch(e) {}
             }
         } catch(e) {}
+
+        // Final pass for current Antigravity side-panel composer variants. Keep this
+        // narrow so action bars, diffs, and approval controls remain visible.
+        try {
+            clone.querySelectorAll('[id="antigravity.agentSidePanelInputBox"], [aria-label="Message input"], [contenteditable="true"][role="combobox"]').forEach(el => {
+                const composer = el.closest('[id="antigravity.agentSidePanelInputBox"]');
+                if (composer && composer !== clone) composer.remove();
+                else el.remove();
+            });
+        } catch(e) {}
         
         const html = clone.outerHTML;
         
@@ -436,9 +458,14 @@ async function captureSnapshot(cdp) {
         }
         const allCSS = rules.join('\\n');
         
+        const cancelBtn = document.querySelector('[data-tooltip-id="input-send-button-cancel-tooltip"]') || 
+                          document.querySelector('button svg.lucide-square')?.closest('button');
+        const isGenerating = !!(cancelBtn && cancelBtn.offsetParent !== null);
+        
         return {
             html: html,
             css: allCSS,
+            isGenerating: isGenerating,
             backgroundColor: cascadeStyles.backgroundColor,
             color: cascadeStyles.color,
             fontFamily: cascadeStyles.fontFamily,
@@ -451,7 +478,8 @@ async function captureSnapshot(cdp) {
         };
     })()`;
 
-    for (const ctx of cdp.contexts) {
+    const failures = [];
+    for (const ctx of [...cdp.contexts]) {
         try {
             // console.log(`Trying context ${ctx.id} (${ctx.name || ctx.origin})...`);
             const result = await cdp.call("Runtime.evaluate", {
@@ -462,25 +490,72 @@ async function captureSnapshot(cdp) {
             });
 
             if (result.exceptionDetails) {
-                // console.log(`Context ${ctx.id} exception:`, result.exceptionDetails);
+                failures.push({
+                    contextId: ctx.id,
+                    contextName: ctx.name || '',
+                    error: result.exceptionDetails.exception?.description || result.exceptionDetails.text || 'Runtime exception'
+                });
                 continue;
             }
 
             if (result.result && result.result.value) {
                 const val = result.result.value;
                 if (val.error) {
-                    // console.log(`Context ${ctx.id} script error:`, val.error);
-                    // if (val.debug) console.log(`   Debug info:`, JSON.stringify(val.debug));
+                    failures.push({
+                        contextId: ctx.id,
+                        contextName: ctx.name || '',
+                        error: val.error,
+                        debug: val.debug
+                    });
                 } else {
                     return val;
                 }
             }
         } catch (e) {
-            console.log(`Context ${ctx.id} connection error:`, e.message);
+            failures.push({ contextId: ctx.id, contextName: ctx.name || '', error: e.message });
         }
     }
 
-    return null;
+    return {
+        error: failures.length > 0 ? 'Snapshot evaluation failed in every execution context' : 'No execution contexts available',
+        failures
+    };
+}
+
+function getContextCandidates(cdp) {
+    return [...cdp.contexts].sort((a, b) => {
+        const aDefault = a.auxData?.isDefault ? 1 : 0;
+        const bDefault = b.auxData?.isDefault ? 1 : 0;
+        return bDefault - aDefault;
+    });
+}
+
+async function evaluateInContexts(cdp, expression, { awaitPromise = false, timeoutMs = 3000 } = {}) {
+    const failures = [];
+    for (const ctx of getContextCandidates(cdp)) {
+        try {
+            const result = await cdp.call('Runtime.evaluate', {
+                expression,
+                returnByValue: true,
+                awaitPromise,
+                contextId: ctx.id
+            }, timeoutMs);
+            if (result.exceptionDetails) {
+                failures.push({
+                    contextId: ctx.id,
+                    error: result.exceptionDetails.exception?.description || result.exceptionDetails.text
+                });
+                continue;
+            }
+            if (result.result && Object.hasOwn(result.result, 'value')) {
+                return { value: result.result.value, contextId: ctx.id, failures };
+            }
+            failures.push({ contextId: ctx.id, error: 'No value returned' });
+        } catch (error) {
+            failures.push({ contextId: ctx.id, error: error.message || String(error) });
+        }
+    }
+    return { failures };
 }
 
 // Inject message into Antigravity
@@ -688,6 +763,9 @@ async function clickElement(cdp, { selector, index, textContent }) {
             
             // Strategy: Find all elements matching the selector
             let elements = Array.from(root.querySelectorAll('${selector}'));
+            if (elements.length === 0 && root !== document) {
+                elements = Array.from(document.querySelectorAll('${selector}'));
+            }
             
             const filterText = ${safeText};
             if (filterText) {
@@ -703,6 +781,12 @@ async function clickElement(cdp, { selector, index, textContent }) {
                 elements = elements.filter(el => {
                     return !elements.some(other => other !== el && el.contains(other));
                 });
+            } else {
+                // If no text filter, filter out nested child elements in the matching set
+                // to make sure indices align perfectly with top-level container rows
+                elements = elements.filter(el => {
+                    return !elements.some(other => other !== el && other.contains(el));
+                });
             }
 
             const target = elements[${index}];
@@ -711,6 +795,25 @@ async function clickElement(cdp, { selector, index, textContent }) {
                 // Focus and Click
                 if (target.focus) target.focus();
                 target.click();
+                
+                // MouseEvent fallback click execution (critical for Monaco list rows)
+                try {
+                    const rect = target.getBoundingClientRect();
+                    const centerX = rect.left + (rect.width / 2);
+                    const centerY = rect.top + (rect.height / 2);
+                    const events = ['mousedown', 'mouseup', 'click'];
+                    events.forEach(type => {
+                        target.dispatchEvent(new MouseEvent(type, {
+                            view: window,
+                            bubbles: true,
+                            cancelable: true,
+                            clientX: centerX,
+                            clientY: centerY,
+                            button: 0
+                        }));
+                    });
+                } catch (e) {}
+
                 return { success: true, found: elements.length, indexUsed: ${index} };
             }
             
@@ -948,7 +1051,10 @@ async function startNewChat(cdp) {
                 if (btn.offsetParent === null) return false; // Skip hidden
                 const hasPlusIcon = btn.querySelector('svg.lucide-plus') || 
                                    btn.querySelector('svg.lucide-square-plus') ||
-                                   btn.querySelector('svg[class*="plus"]');
+                                   btn.querySelector('svg[class*="plus"]') ||
+                                   btn.className.includes('codicon-add') ||
+                                   btn.querySelector('.codicon-add') ||
+                                   btn.querySelector('.codicon-clear-all');
                 return hasPlusIcon;
             });
             
@@ -997,10 +1103,11 @@ async function startNewChat(cdp) {
 }
 // Get Chat History - Click history button and scrape conversations
 async function getChatHistory(cdp) {
-    const EXP = `(async () => {
+    const OPEN_EXP = `(() => {
         try {
-            const chats = [];
-            const seenTitles = new Set();
+            const visible = el => !!(el && el.offsetParent !== null && el.getBoundingClientRect().width > 0 && el.getBoundingClientRect().height > 0);
+            const existingPanel = document.querySelector('dialog[aria-label*="conversation" i], [role="dialog"] input[type="text"], [data-radix-popper-content-wrapper] input[type="text"]');
+            if (existingPanel) return { success: true, alreadyOpen: true };
 
             // Priority 1: Look for tooltip ID pattern (history/past/recent)
             let historyBtn = document.querySelector('[data-tooltip-id*="history"], [data-tooltip-id*="past"], [data-tooltip-id*="recent"], [data-tooltip-id*="conversation-history"]');
@@ -1017,11 +1124,11 @@ async function getChatHistory(cdp) {
                 }
             }
 
-            // Fallback: Use previous heuristics (icon/aria-label)
+            // Fallback: Use icon heuristics
             if (!historyBtn) {
                 const allButtons = Array.from(document.querySelectorAll('button, [role="button"], a[data-tooltip-id]'));
                 for (const btn of allButtons) {
-                    if (btn.offsetParent === null) continue;
+                    if (!visible(btn)) continue;
                     const hasHistoryIcon = btn.querySelector('svg.lucide-clock') ||
                                            btn.querySelector('svg.lucide-history') ||
                                            btn.querySelector('svg.lucide-folder') ||
@@ -1038,130 +1145,123 @@ async function getChatHistory(cdp) {
                 return { error: 'History button not found', chats: [] };
             }
 
-            // Click and Wait
             historyBtn.click();
-            await new Promise(r => setTimeout(r, 2000));
-            
-            // Find the side panel
+
+            try {
+                const rect = historyBtn.getBoundingClientRect();
+                const centerX = rect.left + rect.width / 2;
+                const centerY = rect.top + rect.height / 2;
+                ['mousedown', 'mouseup', 'click'].forEach(type => {
+                    historyBtn.dispatchEvent(new MouseEvent(type, { view: window, bubbles: true, cancelable: true, clientX: centerX, clientY: centerY, button: 0 }));
+                });
+            } catch (_) {}
+
+            return { success: true, clicked: true };
+        } catch(e) {
+            return { error: e.toString(), chats: [] };
+        }
+    })()`;
+
+    const SCRAPE_EXP = `(() => {
+        try {
+            const chats = [];
+            const seenTitles = new Set();
+            const visible = el => !!(el && el.offsetParent !== null && el.getBoundingClientRect().width > 0 && el.getBoundingClientRect().height > 0);
+
             let panel = null;
-            let inputsFoundDebug = [];
-            
-            // Strategy 1: The search input has specific placeholder
             let searchInput = null;
-            const inputs = Array.from(document.querySelectorAll('input'));
-            searchInput = inputs.find(i => {
-                const ph = (i.placeholder || '').toLowerCase();
-                return ph.includes('select') || ph.includes('conversation');
-            });
-            
-            // Strategy 2: Look for any text input that looks like a search bar (based on user snippet classes)
-            if (!searchInput) {
-                const allInputs = Array.from(document.querySelectorAll('input[type="text"]'));
-                inputsFoundDebug = allInputs.map(i => 'ph:' + i.placeholder + ', cls:' + i.className);
-                
-                searchInput = allInputs.find(i => 
-                    i.offsetParent !== null && 
-                    (i.className.includes('w-full') || i.classList.contains('w-full'))
-                );
-            }
-            
-            // Strategy 3: Find known text in the panel (Anchor Text Strategy)
-            let anchorElement = null;
-            if (!searchInput) {
-                 const allSpans = Array.from(document.querySelectorAll('span, div, p'));
-                 anchorElement = allSpans.find(s => {
-                     const t = (s.innerText || '').trim();
-                     return t === 'Current' || t === 'Refining Chat History Scraper'; // specific known title
-                 });
+
+            const dialogs = Array.from(document.querySelectorAll('dialog[aria-label*="conversation" i], [role="dialog"]'));
+            const visibleDialog = dialogs.find(dialog => visible(dialog) && dialog.querySelector('input[type="text"], input'));
+            if (visibleDialog) {
+                panel = visibleDialog;
+                searchInput = visibleDialog.querySelector('input[type="text"], input');
             }
 
-            const startElement = searchInput || anchorElement;
+            if (!panel) {
+                const inputs = Array.from(document.querySelectorAll('input[type="text"], input'));
+                const candidateInput = inputs.find(i => {
+                    const ph = (i.placeholder || '').toLowerCase();
+                    return visible(i) && (ph.includes('select') || ph.includes('conversation') || ph.includes('search') || ph.includes('find') || (i.className || '').toString().includes('w-full'));
+                });
 
-            if (startElement) {
-                // Walk up to find the panel container
-                let container = startElement;
-                for (let i = 0; i < 15; i++) { 
-                    if (!container.parentElement) break;
-                    container = container.parentElement;
-                    const rect = container.getBoundingClientRect();
-                    
-                    // Panel should have good dimensions
-                    // Relaxed constraints for mobile
-                    if (rect.width > 50 && rect.height > 100) {
-                        panel = container;
-                        
-                        // If it looks like a modal/popover (fixed or absolute pos), that's definitely it
-                        const style = window.getComputedStyle(container);
-                        if (style.position === 'fixed' || style.position === 'absolute' || style.zIndex > 10) {
+                if (candidateInput) {
+                    searchInput = candidateInput;
+                    let curr = candidateInput;
+                    for (let depth = 0; depth < 8; depth++) {
+                        if (!curr.parentElement) break;
+                        curr = curr.parentElement;
+                        const rect = curr.getBoundingClientRect();
+                        const style = window.getComputedStyle(curr);
+                        const zIndex = Number.parseInt(style.zIndex, 10) || 0;
+                        if (rect.width > 50 && rect.width < 620 && rect.height > 100 && (style.position === 'fixed' || style.position === 'absolute' || zIndex > 10)) {
+                            panel = curr;
                             break;
                         }
                     }
                 }
-                
-                // Fallback if loop finishes without specific break
-                if (!panel && startElement) {
-                     // Just go up 4 levels
-                     let p = startElement;
-                     for(let k=0; k<4; k++) { if(p.parentElement) p = p.parentElement; }
-                     panel = p;
-                }
+            }
+
+            // Fallback: If we couldn't find an elevated panel, try to find any container around the input
+            if (!panel && searchInput) {
+                let p = searchInput;
+                for (let k = 0; k < 4; k++) { if (p.parentElement) p = p.parentElement; }
+                panel = p;
             }
             
             const debugInfo = { 
                 panelFound: !!panel, 
                 panelWidth: panel?.offsetWidth || 0,
-                inputFound: !!searchInput,
-                anchorFound: !!anchorElement,
-                inputsDebug: inputsFoundDebug.slice(0, 5)
+                inputFound: !!searchInput
             };
+
+            if (!panel) return { pending: true, chats: [], debug: debugInfo };
             
             if (panel) {
-                // Chat titles are in <span> elements
-                const spans = Array.from(panel.querySelectorAll('span'));
+                // Scrape inside panel
+                // Prefer clickable elements (buttons, menuitems, options, anchors)
+                let listElements = Array.from(panel.querySelectorAll('button, [role="menuitem"], [role="option"], a, span'));
                 
-                // Section headers and workspace labels to skip
+                // Skip list patterns
                 const SKIP_EXACT = new Set([
-                    'current', 'other conversations', 'now',
+                    'current', 'other conversations', 'now', 'today', 'yesterday',
                     'projects', 'personal', 'workspace', 'default', 'phone connect antigravity'
                 ]);
                 
-                for (const span of spans) {
-                    const text = span.textContent?.trim() || '';
+                // Extension file skip regex
+                const fileRegex = /\\.(js|ts|tsx|jsx|css|html|json|md|py|ps1|sh|cpp|h|txt|yaml|yml|gitignore)$/i;
+                const pathRegex = /[:\\/]/;
+                
+                for (const el of listElements) {
+                    if (el.offsetParent === null) continue;
+                    
+                    const text = el.textContent?.trim() || '';
                     const lower = text.toLowerCase();
                     
-                    // Skip empty or too short
-                    if (text.length < 3) continue;
-
-                    // Sibling-span heuristic: skip tag/badge labels (like workspaces)
-                    // If a short span has a longer sibling span, it's likely a tag next to the actual title
-                    if (text.length < 40 && span.parentElement) {
-                        let hasLongerSiblingSpan = false;
-                        for (const child of span.parentElement.children) {
-                            if (child !== span && child.tagName === 'SPAN') {
-                                const childTextLength = (child.textContent?.trim() || '').length;
-                                if (childTextLength > text.length) {
-                                    hasLongerSiblingSpan = true;
-                                    break;
-                                }
-                            }
-                        }
-                        if (hasLongerSiblingSpan) continue;
-                    }
-                    
-                    // Skip section headers
+                    if (text.length < 3 || text.length > 80) continue;
                     if (SKIP_EXACT.has(lower)) continue;
                     if (lower.startsWith('recent in ')) continue;
                     if (lower.startsWith('show ') && lower.includes('more')) continue;
+                    if (lower.includes('to navigate') || lower.includes('to select') || lower.includes('to enter') || lower.includes('to split')) continue;
+                    if (lower.endsWith(' ago') || /^\d+\s*(sec|min|hr|day|wk|mo|yr)/i.test(lower)) continue;
                     
-                    // Skip timestamps
-                    if (lower.endsWith(' ago') || /^\\d+\\s*(sec|min|hr|day|wk|mo|yr)/i.test(lower)) continue;
+                    // Exclude workspace filenames and editor line segments
+                    if (fileRegex.test(lower) || pathRegex.test(lower) || lower.startsWith('.env')) continue;
                     
-                    // Skip very long text (containers)
-                    if (text.length > 100) continue;
+                    // Exclude Monaco subtrees specifically
+                    let isMonaco = false;
+                    let parent = el;
+                    while (parent && parent !== panel) {
+                        const cls = (parent.className || '').toString();
+                        if (cls.includes('monaco-') || cls.includes('editor-')) {
+                            isMonaco = true;
+                            break;
+                        }
+                        parent = parent.parentElement;
+                    }
+                    if (isMonaco) continue;
                     
-                    // Skip duplicates
                     if (seenTitles.has(text)) continue;
-                    
                     seenTitles.add(text);
                     chats.push({ title: text, date: 'Recent' });
                     
@@ -1169,33 +1269,33 @@ async function getChatHistory(cdp) {
                 }
             }
             
-            // Note: Panel is left open on PC as requested ("launch history on pc")
-
             return { success: true, chats: chats, debug: debugInfo };
         } catch(e) {
             return { error: e.toString(), chats: [] };
         }
     })()`;
 
-    let lastError = null;
-    for (const ctx of cdp.contexts) {
-        try {
-            const res = await cdp.call("Runtime.evaluate", {
-                expression: EXP,
-                returnByValue: true,
-                awaitPromise: true,
-                contextId: ctx.id
-            });
-            if (res.result?.value) return res.result.value;
-            // If result.value is null/undefined but no error thrown, check exceptionDetails
-            if (res.exceptionDetails) {
-                lastError = res.exceptionDetails.exception?.description || res.exceptionDetails.text;
-            }
-        } catch (e) {
-            lastError = e.message;
-        }
+    const opened = await evaluateInContexts(cdp, OPEN_EXP, { timeoutMs: 3000 });
+    if (opened.value?.error) return opened.value;
+    if (!opened.value?.success) {
+        return { error: 'Context failed opening history panel', chats: [], failures: opened.failures };
     }
-    return { error: 'Context failed: ' + (lastError || 'No contexts available'), chats: [] };
+
+    let lastResult = null;
+    for (let attempt = 0; attempt < 14; attempt++) {
+        await new Promise(resolve => setTimeout(resolve, 250));
+        const scraped = await evaluateInContexts(cdp, SCRAPE_EXP, { timeoutMs: 2500 });
+        if (scraped.value?.success) return scraped.value;
+        if (scraped.value && !scraped.value.pending) return scraped.value;
+        lastResult = scraped;
+    }
+
+    return {
+        error: 'History panel did not open or could not be scraped within timeout',
+        chats: [],
+        debug: lastResult?.value?.debug,
+        failures: lastResult?.failures || []
+    };
 }
 
 async function selectChat(cdp, chatTitle) {
@@ -1453,17 +1553,13 @@ async function getAppState(cdp) {
         const state = { mode: 'Unknown', model: 'Unknown' };
 
         // 1. Get Mode (Fast/Planning)
-        // Strategy: Find the clickable mode button which contains either "Fast" or "Planning"
-        // It's usually a button or div with cursor:pointer containing the mode text
         const allEls = Array.from(document.querySelectorAll('*'));
 
-        // Find elements that are likely mode buttons
         for (const el of allEls) {
             if (el.children.length > 0) continue;
             const text = (el.innerText || '').trim();
             if (text !== 'Fast' && text !== 'Planning') continue;
 
-            // Check if this or a parent is clickable (the actual mode selector)
             let current = el;
             for (let i = 0; i < 5; i++) {
                 if (!current) break;
@@ -1477,7 +1573,6 @@ async function getAppState(cdp) {
             if (state.mode !== 'Unknown') break;
         }
 
-        // Fallback: Just look for visible text
         if (state.mode === 'Unknown') {
             const textNodes = allEls.filter(el => el.children.length === 0 && el.innerText);
             if (textNodes.some(el => el.innerText.trim() === 'Planning')) state.mode = 'Planning';
@@ -1485,15 +1580,12 @@ async function getAppState(cdp) {
         }
 
         // 2. Get Model
-        // Strategy: Look for leaf text nodes containing a known model keyword
         const KNOWN_MODELS = ["Gemini", "Claude", "GPT"];
         const textNodes2 = allEls.filter(el => el.children.length === 0 && el.innerText);
         
-        // First try: find inside a clickable parent (button, cursor:pointer)
         let modelEl = textNodes2.find(el => {
             const txt = el.innerText.trim();
             if (!KNOWN_MODELS.some(k => txt.includes(k))) return false;
-            // Must be in a clickable context (header/toolbar, not chat content)
             let parent = el;
             for (let i = 0; i < 8; i++) {
                 if (!parent) break;
@@ -1503,7 +1595,6 @@ async function getAppState(cdp) {
             return false;
         });
         
-        // Fallback: any leaf node with a known model name
         if (!modelEl) {
             modelEl = textNodes2.find(el => {
                 const txt = el.innerText.trim();
@@ -1513,6 +1604,36 @@ async function getAppState(cdp) {
 
         if (modelEl) {
             state.model = modelEl.innerText.trim();
+        }
+
+        // 3. Detect if a Quick Pick workspace dialog is open on desktop
+        const quickInput = document.querySelector('.quick-input-widget');
+        const isQuickInputVisible = quickInput && quickInput.offsetParent !== null;
+        if (isQuickInputVisible) {
+            state.quickInput = {
+                title: quickInput.querySelector('.quick-input-title')?.textContent?.trim() || 'Select Option',
+                placeholder: quickInput.querySelector('input.input')?.placeholder || '',
+                options: (() => {
+                    const allRows = Array.from(quickInput.querySelectorAll('.monaco-list-row, .quick-input-list-row'))
+                        .filter(row => row.offsetParent !== null);
+                    const topRows = allRows.filter(r => !allRows.some(other => other !== r && other.contains(r)));
+                    return topRows.map((row, idx) => {
+                        let text = '';
+                        const nameEl = row.querySelector('.label-name');
+                        const descEl = row.querySelector('.label-description') || row.querySelector('.label-detail');
+                        if (nameEl) {
+                            text = (nameEl.innerText || nameEl.textContent || '').trim();
+                            if (descEl) {
+                                const descText = (descEl.innerText || descEl.textContent || '').trim();
+                                if (descText) text += ' - ' + descText;
+                            }
+                        } else {
+                            text = (row.innerText || row.textContent || '').trim();
+                        }
+                        return { index: idx, text };
+                    });
+                })()
+            };
         }
 
         return state;
@@ -1583,8 +1704,15 @@ async function initCDP() {
 async function startPolling(wss) {
     let lastErrorLog = 0;
     let isConnecting = false;
+    let stopped = false;
+    let pollTimer = null;
+
+    const schedule = (delay) => {
+        if (!stopped) pollTimer = setTimeout(poll, delay);
+    };
 
     const poll = async () => {
+        if (stopped) return;
         if (!cdpConnection || (cdpConnection.ws && cdpConnection.ws.readyState !== WebSocket.OPEN)) {
             if (!isConnecting) {
                 console.log('🔍 Looking for Antigravity CDP connection...');
@@ -1604,7 +1732,7 @@ async function startPolling(wss) {
             } catch (err) {
                 // Not found yet, just wait for next cycle
             }
-            setTimeout(poll, 2000); // Try again in 2 seconds if not found
+            schedule(2000); // Try again in 2 seconds if not found
             return;
         }
 
@@ -1636,6 +1764,9 @@ async function startPolling(wss) {
                 if (!lastErrorLog || now - lastErrorLog > 10000) {
                     const errorMsg = snapshot?.error || 'No valid snapshot captured (check contexts)';
                     console.warn(`⚠️  Snapshot capture issue: ${errorMsg} `);
+                    if (snapshot?.failures?.length) {
+                        console.warn('   Context diagnostics:', JSON.stringify(snapshot.failures));
+                    }
                     if (errorMsg.includes('container not found')) {
                         console.log('   (Tip: Ensure an active chat is open in Antigravity)');
                     }
@@ -1649,19 +1780,89 @@ async function startPolling(wss) {
             console.error('Poll error:', err.message);
         }
 
-        setTimeout(poll, POLL_INTERVAL);
+        schedule(POLL_INTERVAL);
     };
 
     poll();
+    return () => {
+        stopped = true;
+        if (pollTimer) clearTimeout(pollTimer);
+    };
+}
+
+// Settings configuration & workspace file tree utilities
+const CONFIG_FILE = join(__dirname, '..', 'antigravity.config.json');
+const DEFAULT_SETTINGS = {
+    skills: [
+        { id: 'ui-ux-pro-max', name: 'UI/UX Pro Max', enabled: true, description: 'UI/UX design intelligence' },
+        { id: 'systematic-debugging', name: 'Systematic Debugging', enabled: true, description: 'Debugging guidance' },
+        { id: 'brainstorming', name: 'Brainstorming', enabled: true, description: 'Creative feature exploration' },
+        { id: 'developing-with-bigquery', name: 'Developing with BigQuery', enabled: false, description: 'BigQuery optimizations' },
+        { id: 'vercel-react-best-practices', name: 'Vercel React Best Practices', enabled: false, description: 'React performance guidelines' },
+        { id: 'web-design-guidelines', name: 'Web Design Guidelines', enabled: false, description: 'Accessibility and UX audit' }
+    ],
+    mcpServers: [
+        { id: 'StitchMCP', name: 'StitchMCP', enabled: true, url: 'http://localhost:3001', tools: ['create_project', 'edit_screens', 'list_screens'] }
+    ],
+    general: {
+        theme: 'dark',
+        contrast: 'premium',
+        autoScroll: true,
+        pollInterval: 1000
+    }
+};
+
+function loadSettings() {
+    if (fs.existsSync(CONFIG_FILE)) {
+        try {
+            const data = fs.readFileSync(CONFIG_FILE, 'utf8');
+            return JSON.parse(data);
+        } catch (e) {
+            console.error('Failed to read config file, using defaults:', e.message);
+        }
+    }
+    return DEFAULT_SETTINGS;
+}
+
+function saveSettings(settings) {
+    try {
+        fs.writeFileSync(CONFIG_FILE, JSON.stringify(settings, null, 2), 'utf8');
+        return true;
+    } catch (e) {
+        console.error('Failed to write config file:', e.message);
+        return false;
+    }
+}
+
+function getWorkspaceFilesSync(dir, baseDir = dir) {
+    let results = [];
+    try {
+        const list = fs.readdirSync(dir, { withFileTypes: true });
+        for (const file of list) {
+            // Exclude common large/system directories
+            if (file.name === 'node_modules' || file.name === '.git' || file.name === 'venv' || file.name === '.kilo' || file.name === 'certs') {
+                continue;
+            }
+            const resPath = join(dir, file.name);
+            const relPath = join(relative(baseDir, resPath)).replace(/\\/g, '/');
+            if (file.isDirectory()) {
+                results.push({ type: 'directory', path: relPath, name: file.name });
+                results = results.concat(getWorkspaceFilesSync(resPath, baseDir));
+            } else {
+                results.push({ type: 'file', path: relPath, name: file.name });
+            }
+        }
+    } catch (e) {}
+    return results;
 }
 
 // Create Express app
 async function createServer() {
     const app = express();
 
-    // Check for SSL certificates
-    const keyPath = join(__dirname, 'certs', 'server.key');
-    const certPath = join(__dirname, 'certs', 'server.cert');
+    // Check for SSL certificates (pointing to root directory certs/)
+    const keyPath = join(__dirname, '..', 'certs', 'server.key');
+    const certPath = join(__dirname, '..', 'certs', 'server.cert');
     const hasSSL = fs.existsSync(keyPath) && fs.existsSync(certPath);
 
     let server;
@@ -1739,7 +1940,63 @@ async function createServer() {
         }
     });
 
-    app.use(express.static(join(__dirname, 'public')));
+    app.use(express.static(join(__dirname, '..', 'public')));
+
+    // Workspace Files Endpoint (for @ tagging)
+    app.get('/api/workspace-files', (req, res) => {
+        const rootDir = join(__dirname, '..');
+        const files = getWorkspaceFilesSync(rootDir);
+        res.json({ success: true, files });
+    });
+
+    // Settings Endpoints
+    app.get('/api/settings', (req, res) => {
+        res.json(loadSettings());
+    });
+
+    app.post('/api/settings', (req, res) => {
+        const success = saveSettings(req.body);
+        res.json({ success });
+    });
+
+    // Git Status Endpoint (for Revert UI)
+    app.get('/api/git-status', (req, res) => {
+        try {
+            const rootDir = join(__dirname, '..');
+            const output = execSync('git status --porcelain', { cwd: rootDir, encoding: 'utf8' });
+            const files = output.split('\n')
+                .filter(line => line.trim())
+                .map(line => {
+                    const status = line.substring(0, 2).trim();
+                    const filePath = line.substring(3).trim();
+                    return { status, path: filePath };
+                });
+            res.json({ success: true, files });
+        } catch (e) {
+            res.status(500).json({ success: false, error: e.message });
+        }
+    });
+
+    // Git Revert Endpoint
+    app.post('/api/revert', (req, res) => {
+        const { files, all } = req.body;
+        try {
+            const rootDir = join(__dirname, '..');
+            if (all) {
+                execSync('git checkout -- .', { cwd: rootDir });
+                res.json({ success: true, message: 'All changes reverted successfully' });
+            } else if (Array.isArray(files) && files.length > 0) {
+                // Escape filenames for shell safety
+                const escapedFiles = files.map(f => `"${f.replace(/"/g, '\\"')}"`).join(' ');
+                execSync(`git checkout -- ${escapedFiles}`, { cwd: rootDir });
+                res.json({ success: true, message: `Reverted ${files.length} files successfully` });
+            } else {
+                res.status(400).json({ success: false, error: 'No files specified for revert' });
+            }
+        } catch (e) {
+            res.status(500).json({ success: false, error: e.message });
+        }
+    });
 
     // Login endpoint
     app.post('/login', (req, res) => {
@@ -1784,8 +2041,8 @@ async function createServer() {
 
     // SSL status endpoint
     app.get('/ssl-status', (req, res) => {
-        const keyPath = join(__dirname, 'certs', 'server.key');
-        const certPath = join(__dirname, 'certs', 'server.cert');
+        const keyPath = join(__dirname, '..', 'certs', 'server.key');
+        const certPath = join(__dirname, '..', 'certs', 'server.cert');
         const certsExist = fs.existsSync(keyPath) && fs.existsSync(certPath);
         res.json({
             enabled: hasSSL,
@@ -1800,7 +2057,7 @@ async function createServer() {
     app.post('/generate-ssl', async (req, res) => {
         try {
             const { execSync } = await import('child_process');
-            execSync('node generate_ssl.js', { cwd: __dirname, stdio: 'pipe' });
+            execSync('node scripts/generate_ssl.js', { cwd: join(__dirname, '..'), stdio: 'pipe' });
             res.json({
                 success: true,
                 message: 'SSL certificates generated! Restart the server to enable HTTPS.'
@@ -2141,7 +2398,7 @@ async function main() {
         const { server, wss, app, hasSSL } = await createServer();
 
         // Start background polling (it will now handle reconnections)
-        startPolling(wss);
+        const stopPolling = await startPolling(wss);
 
         // Remote Click
         app.post('/remote-click', async (req, res) => {
@@ -2219,6 +2476,7 @@ async function main() {
         // Graceful shutdown handlers
         const gracefulShutdown = (signal) => {
             console.log(`\n🛑 Received ${signal}. Shutting down gracefully...`);
+            if (typeof stopPolling === 'function') stopPolling();
             wss.close(() => {
                 console.log('   WebSocket server closed');
             });

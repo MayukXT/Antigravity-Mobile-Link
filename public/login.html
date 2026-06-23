@@ -3,51 +3,59 @@
 
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>Login - Antigravity Phone Connect</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700&family=Inter:wght@400;500&display=swap" rel="stylesheet">
     <style>
         :root {
-            --bg: #0a0a0a;
-            --surface: #1a1a1a;
-            --primary: #3b82f6;
+            --bg: #000000;
+            --surface: #121214;
+            --input-bg: #1c1c1e;
+            --primary: #4285f4;
+            --border: #27272a;
             --text: #ffffff;
-            --text-muted: #a1a1aa;
+            --text-muted: #71717a;
+            --error-bg: rgba(244, 63, 94, 0.1);
+            --error-text: #f43f5e;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
         }
 
         body {
-            margin: 0;
-            padding: 0;
             background: var(--bg);
             color: var(--text);
             font-family: 'Inter', sans-serif;
             display: flex;
             align-items: center;
             justify-content: center;
-            height: 100vh;
+            height: 100dvh;
             overflow: hidden;
+            padding: 20px;
         }
 
         .login-card {
             background: var(--surface);
-            padding: 2.5rem;
-            border-radius: 1.5rem;
-            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6);
-            width: 90%;
-            max-width: 400px;
+            padding: 2.25rem 2rem;
+            border-radius: 8px;
+            border: 1px solid var(--border);
+            width: 100%;
+            max-width: 380px;
             text-align: center;
-            border: 1px solid rgba(255, 255, 255, 0.05);
-            animation: slideUp 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+            animation: slideUp 0.5s cubic-bezier(0.16, 1, 0.3, 1);
         }
 
         @keyframes slideUp {
             from {
                 opacity: 0;
-                transform: translateY(20px);
+                transform: translateY(12px);
             }
-
             to {
                 opacity: 1;
                 transform: translateY(0);
@@ -55,19 +63,18 @@
         }
 
         h1 {
+            font-family: 'Outfit', sans-serif;
             font-size: 1.75rem;
+            font-weight: 700;
             margin-bottom: 0.5rem;
-            background: linear-gradient(135deg, #fff 0%, #a1a1aa 100%);
-            -webkit-background-clip: text;
-            background-clip: text;
-            -webkit-text-fill-color: transparent;
-            font-weight: 600;
+            letter-spacing: -0.02em;
         }
 
         p {
             color: var(--text-muted);
-            font-size: 0.95rem;
-            margin-bottom: 2.5rem;
+            font-size: 0.9rem;
+            margin-bottom: 2rem;
+            line-height: 1.4;
         }
 
         .input-group {
@@ -77,54 +84,59 @@
 
         input {
             width: 100%;
-            padding: 1.1rem;
-            background: #262626;
-            border: 1px solid #333;
-            border-radius: 0.85rem;
-            color: #fff;
-            box-sizing: border-box;
+            padding: 14px 16px;
+            background: var(--input-bg);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            color: var(--text);
             outline: none;
-            transition: all 0.3s;
-            font-size: 1rem;
+            transition: border-color 0.2s, background-color 0.2s;
+            font-size: 15px;
+            font-family: inherit;
         }
 
         input:focus {
             border-color: var(--primary);
-            background: #2d2d2d;
-            box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.1);
+            background: #242426;
         }
 
         button {
             width: 100%;
-            padding: 1.1rem;
+            padding: 14px;
             background: var(--primary);
-            color: #fff;
+            color: #ffffff;
             border: none;
-            border-radius: 0.85rem;
+            border-radius: 6px;
+            font-family: 'Outfit', sans-serif;
             font-weight: 600;
             cursor: pointer;
-            transition: all 0.3s;
-            font-size: 1rem;
-            box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
-        }
-
-        button:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 6px 16px rgba(59, 130, 246, 0.4);
+            transition: opacity 0.2s, transform 0.2s;
+            font-size: 15px;
+            letter-spacing: 0.02em;
         }
 
         button:active {
-            transform: translateY(0);
+            transform: scale(0.96);
+            opacity: 0.9;
+        }
+
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
         }
 
         .error {
-            color: #ef4444;
-            font-size: 0.9rem;
+            color: var(--error-text);
+            font-size: 13px;
             margin-top: 1.25rem;
             display: none;
-            padding: 0.75rem;
-            background: rgba(239, 68, 68, 0.1);
-            border-radius: 0.5rem;
+            padding: 12px;
+            background: var(--error-bg);
+            border: 1px solid rgba(244, 63, 94, 0.15);
+            border-radius: 6px;
+            text-align: left;
+            line-height: 1.4;
         }
     </style>
 </head>
@@ -132,12 +144,12 @@
 <body>
     <div class="login-card">
         <h1>Antigravity</h1>
-        <p>Access chat from mobile network</p>
+        <p>Access session from mobile network</p>
         <div class="input-group">
-            <input type="password" id="password" placeholder="Enter password" autofocus>
+            <input type="password" id="password" placeholder="Enter session passcode" autofocus autocomplete="current-password">
         </div>
         <button id="loginBtn">Connect Securely</button>
-        <div class="error" id="error">Invalid password. Please try again.</div>
+        <div class="error" id="error">Incorrect passcode. Please try again.</div>
     </div>
     <script>
         const btn = document.getElementById('loginBtn');

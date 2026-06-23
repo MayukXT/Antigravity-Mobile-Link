@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        .vscode-dark { background-color: #1e1e1e; color: #d4d4d4; }
+        .thought { background: #252526; padding: 10px; margin: 5px; }
+        .thinking { border-left: 2px solid #007acc; }
+        .btn-blue { background: #007acc; color: white; }
+    </style>
+</head>
+<body class="vscode-dark">
+    <div id="conversation">
+        <!-- Message 1 (User) -->
+        <div class="message user-message">
+            <p>Can you refactor my app?</p>
+        </div>
+
+        <!-- Message 2 (AI Assistant) -->
+        <div class="message assistant-message">
+            <div class="thought">
+                <span>Thought Process</span>
+                <p>Analyzing directory... I need to find the files.</p>
+            </div>
+            
+            <div class="thinking">
+                <span>Thinking details here...</span>
+            </div>
+
+            <p>I have analyzed the workspace. Here are the proposed changes:</p>
+
+            <pre><code>function hello() {
+    console.log("world");
+}</code></pre>
+
+            <!-- Action buttons inside the message -->
+            <div class="flex gap-2 mt-4">
+                <button class="btn-blue">Allow once</button>
+                <button class="btn-danger">Deny</button>
+            </div>
+        </div>
+
+        <!-- Desktop Input Box (should be stripped by scraper) -->
+        <div class="absolute bottom-0 left-0 right-0 p-4 bg-gray-900 border-t border-gray-800">
+            <div class="mx-8 mb-8">
+                <div contenteditable="true" data-lexical-editor="true" class="w-full p-2 bg-gray-800 text-white rounded">
+                    Ask anything, use @ to mention...
+                </div>
+            </div>
+        </div>
+
+        <!-- Current Antigravity side-panel input shape (should also be stripped) -->
+        <div id="antigravity.agentSidePanelInputBox" class="relative flex flex-col p-px rounded-2xl bg-card-border">
+            <div class="relative flex flex-col gap-0 p-1 rounded-[calc(theme(borderRadius.2xl)-1px)] bg-card">
+                <div class="relative w-full">
+                    <div aria-label="Message input" contenteditable="true" role="combobox" class="max-h-[300px] rounded-md cursor-text" data-lexical-editor="true"></div>
+                    <p>Ask anything, @ to mention, / for actions</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

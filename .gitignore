@@ -47,3 +47,9 @@ include/
 lib/
 lib64/
 share/
+
+# Graphify Cache Output
+graphify-out/
+
+# AI Agent Local Rules
+.agents/

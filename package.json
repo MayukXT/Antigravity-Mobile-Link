@@ -4,8 +4,9 @@
     "type": "module",
     "description": "Mobile web interface for monitoring Antigravity chat via visual snapshots",
     "scripts": {
-        "start": "node server.js",
-        "dev": "node server.js"
+        "start": "node src/server.js",
+        "dev": "node src/server.js",
+        "test": "node tests/test_scraping.js"
     },
     "dependencies": {
         "compression": "^1.8.1",
@@ -18,5 +19,8 @@
     "license": "GPL-3.0-only",
     "engines": {
         "node": ">=16.0.0"
+    },
+    "devDependencies": {
+        "jsdom": "^29.1.1"
     }
 }
